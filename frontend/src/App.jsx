@@ -17,6 +17,8 @@ function App() {
   const [subjects, setSubjects] = useState([]);
   const [updatedCount, setUpdatedCount] = useState(0);
   const [updatedStudents, setUpdatedStudents] = useState([]);
+  const [positionPreview, setPositionPreview] = useState([]);
+  const [positionsCalculated, setPositionsCalculated] = useState(false);
 
   // mode: 'upload' | 'edit' | 'done'
   const [mode, setMode] = useState('upload');
@@ -53,6 +55,8 @@ function App() {
       setSubjects(data.subjects || []);
       setUpdatedCount(0);
       setUpdatedStudents([]);
+      setPositionPreview([]);
+      setPositionsCalculated(false);
       setMode('edit');
       setSuccessMsg(`✅ Template loaded! Found ${data.students.length} students and ${data.subjects.length} subjects.`);
     } catch (err) {
@@ -77,6 +81,7 @@ function App() {
   const handleReset = () => {
     setFile(null); setSessionId(null); setStudents([]); setSubjects([]);
     setUpdates([]); setPrompt(''); setUpdatedCount(0); setUpdatedStudents([]);
+    setPositionPreview([]); setPositionsCalculated(false);
     setMode('upload'); setSuccessMsg(null); setError(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -131,7 +136,28 @@ function App() {
     }
   };
 
-  // ─── 4. Download ───────────────────────────────────────────────────────────
+  // ─── 4. Calculate Positions ────────────────────────────────────────────────
+  const handleCalculatePositions = async () => {
+    setLoading(true); setError(null); setSuccessMsg(null);
+    try {
+      const response = await fetch('/api/calculate-positions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to calculate positions.');
+      setPositionPreview(data.preview || []);
+      setPositionsCalculated(true);
+      setSuccessMsg('✅ Positions calculated and saved into the workbook!');
+    } catch (err) {
+      setError(err.message || 'Failed to calculate positions.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ─── 5. Download ───────────────────────────────────────────────────────────
   const handleDownload = async () => {
     try {
       const response = await fetch(`/api/download/${sessionId}`);
@@ -242,16 +268,62 @@ function App() {
             </div>
           )}
 
-          {/* Finish & Download */}
+          {/* Calculate Positions + Finish & Download */}
           {mode === 'edit' && updatedCount > 0 && (
             <div className="glass-card">
-              <h2 className="section-title"><Download size={18} /> Finish</h2>
-              <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '1rem', lineHeight: 1.5 }}>
-                All done? Download the updated file. Open it in Excel and your existing formulas (Total, Percentage, Grade) will calculate automatically.
-              </p>
-              <button className="btn btn-success" onClick={handleDownload} style={{ width: '100%' }}>
-                <Download size={18} /> Download Updated Excel
-              </button>
+              <h2 className="section-title"><Download size={18} /> Finalize</h2>
+
+              {!positionsCalculated ? (
+                <>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleCalculatePositions}
+                    disabled={loading}
+                    style={{ marginBottom: '0.75rem' }}
+                  >
+                    {loading
+                      ? <><span className="spinner" /> Calculating...</>
+                      : <><Sparkles size={16} /> Calculate &amp; Save Positions</>
+                    }
+                  </button>
+                  <p style={{ fontSize: '0.78rem', color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+                    Ranks all students by total obtained marks and saves Current &amp; Sum-up Positions into every student block.
+                  </p>
+                </>
+              ) : (
+                <>
+                  {/* Ranking mini-table */}
+                  <div className="table-container" style={{ marginBottom: '1rem', maxHeight: '220px' }}>
+                    <table className="preview-table">
+                      <thead>
+                        <tr>
+                          <th>Pos</th>
+                          <th>Student</th>
+                          <th>Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {positionPreview.map((r, i) => (
+                          <tr key={i}>
+                            <td>
+                              <span style={{
+                                fontWeight: 700,
+                                color: r.position === 1 ? '#fbbf24' : r.position === 2 ? '#94a3b8' : r.position === 3 ? '#f97316' : '#6ee7b7'
+                              }}>{r.ordinal}</span>
+                            </td>
+                            <td style={{ color: '#e2e8f0' }}>{r.student}</td>
+                            <td style={{ color: '#34d399', fontWeight: 600 }}>{r.total}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <button className="btn btn-success" onClick={handleDownload} style={{ width: '100%' }}>
+                    <Download size={18} /> Download Updated Excel
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

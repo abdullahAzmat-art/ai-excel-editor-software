@@ -3,7 +3,7 @@ import cors from 'cors';
 import multer from 'multer';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
-import { analyzeExcel, applyMarksOnly } from './excelService.js';
+import { analyzeExcel, applyMarksOnly, calculatePositions } from './excelService.js';
 import { extractUpdates } from './llmService.js';
 import { llmResponseSchema } from './validation.js';
 
@@ -115,7 +115,28 @@ app.post('/api/apply-update', async (req, res) => {
 });
 
 /**
- * 4. Download the updated Excel file
+ * 4. Calculate & save positions for all students
+ * POST /api/calculate-positions
+ */
+app.post('/api/calculate-positions', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    const session = sessions[sessionId];
+    if (!session) return res.status(404).json({ error: 'Session not found or expired.' });
+
+    const { updatedBuffer, preview } = await calculatePositions(session.buffer);
+    session.buffer = updatedBuffer; // persist positions into workbook
+
+    console.log(`Session ${sessionId}: Positions calculated for ${preview.length} students.`);
+    res.json({ success: true, preview });
+  } catch (error) {
+    console.error('Calculate Positions Error:', error);
+    res.status(500).json({ error: error.message || 'Failed to calculate positions.' });
+  }
+});
+
+/**
+ * 5. Download the updated Excel file
  * GET /api/download/:sessionId
  */
 app.get('/api/download/:sessionId', (req, res) => {
