@@ -1,0 +1,8 @@
+node_modules/
+.env
+.DS_Store
+dist/
+build/
+backend/student_results.xlsx
+backend/student_results_updated.xlsx
+backend/verify_excel.js
